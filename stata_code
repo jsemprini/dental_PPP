@@ -1,0 +1,382 @@
+Stata files for creating and analyzing data
+
+******Jason Semprini: PPP Project - create dataset 7/7/20******
+
+import delimited "C:\Users\jsemprini\Documents\PPP\data\PPP Data 150k plus.csv"
+
+save "C:\Users\jsemprini\Documents\PPP\stata_data\over150k.dta"
+
+
+clear all
+
+cd "C:\Users\jsemprini\Documents\PPP\data\state"
+clear
+local myfilelist : dir . files"*.csv"
+foreach file of local myfilelist {
+drop _all
+insheet using `"`file'"'
+local outfile = subinstr("`file'",".csv","",.)
+save "`outfile'", replace
+}
+
+
+
+clear all
+
+cd "C:\Users\jsemprini\Documents\PPP\data\state"
+
+local satafiles: dir . files "*.dta"
+foreach file of local satafiles { 
+
+preserve
+use `"`file'"', clear
+gen filename =  regexr("`file'", "_.20", "")
+
+
+#delimit cr
+
+
+save temp, replace
+restore
+append using temp, force
+}
+erase temp.dta
+
+subsave using "P:\HMP\Faculty\hpsharma\research\Sharma-NH\Data\Stata\quality\statePPP.dta"
+
+drop filename
+
+
+append using "C:\Users\jsemprini\Documents\PPP\stata_data\over150k.dta"
+
+
+gen under150=1 if loanamount!=.
+replace under150=0 if loanamount==.
+
+gen loancode=substr(loanrange,1,1)
+gen minloan=5000000 if loancode=="a"
+replace minloan=2000000 if loancode=="b"
+replace minloan=1000000 if loancode=="c"
+replace minloan=350000 if loancode=="d"
+replace minloan=350000 if loancode=="d"
+replace minloan=150000 if loancode=="e"
+replace minloan=loanamount if loanamount!=.
+
+gen medloan=7500000 if loancode=="a"
+replace medloan=3500000 if loancode=="b"
+replace medloan=1500000 if loancode=="c"
+replace medloan=675000 if loancode=="d"
+replace medloan=250000 if loancode=="e"
+replace medloan=loanamount if loanamount!=.
+
+gen maxloan=10000000 if loancode=="a"
+replace maxloan=5000000 if loancode=="b"
+replace maxloan=2000000 if loancode=="c"
+replace maxloan=1000000 if loancode=="d"
+replace maxloan=350000 if loancode=="e"
+replace maxloan=loanamount if loanamount!=.
+
+
+gen nfp=1 if nonprofit=="Y"
+replace nfp=0 if nonprofit==""
+
+gen childcare=0
+replace childcare=1 if businesstype=="Non-Profit Childcare Center"
+
+gen other_nfp=0
+replace other_nfp=1 if nonprofit=="Y" & childcare==0
+
+gen corp=0
+replace corp=1 if businesstype=="Corporation" | businesstype=="Subchapter S Corporation" | businesstype=="Limited  Liability Company(LLC)" 
+
+gen smallbus=0
+replace smallbus=1 if businesstype=="Independent Contractors" | businesstype=="Partnership" | businesstype=="Self-Employed Individuals" | businesstype=="Sole Proprietorship"
+
+gen other=0
+replace other=1 if smallbus==0 & corp==0 & nfp==0
+
+save "C:\Users\jsemprini\Documents\PPP\stata_data\final_PPP.dta"
+
+***created code, code4***
+
+clear all
+
+***add code indicators***
+import delimited "C:\Users\jsemprini\Documents\PPP\data\indicators-geo-ncis\1-naics_code2-tomerge.csv"
+save "C:\Users\jsemprini\Documents\PPP\data\indicators-geo-ncis\code2_naics.dta"
+clear all
+import delimited "C:\Users\jsemprini\Documents\PPP\data\indicators-geo-ncis\1-naics_code4-tomerge.csv"
+save "C:\Users\jsemprini\Documents\PPP\data\indicators-geo-ncis\code4_naics.dta"
+clear all
+import delimited "C:\Users\jsemprini\Documents\PPP\data\indicators-geo-ncis\1-naics-tomerge.csv"
+save "C:\Users\jsemprini\Documents\PPP\data\indicators-geo-ncis\code6_naics.dta"
+clear all
+
+use "C:\Users\jsemprini\Documents\PPP\stata_data\final_PPP.dta"
+
+merge m:1 naicscode using "C:\Users\jsemprini\Documents\PPP\data\indicators-geo-ncis\code6_naics.dta"
+tab naicscode if _merge==1
+drop _merge
+merge m:1 code_type using "C:\Users\jsemprini\Documents\PPP\data\indicators-geo-ncis\code2_naics.dta"
+drop _merge
+merge m:1 code_type4 using "C:\Users\jsemprini\Documents\PPP\data\indicators-geo-ncis\code4_naics.dta"
+
+drop _merge
+save "C:\Users\jsemprini\Documents\PPP\stata_data\final_PPP.dta", replace
+
+clear all
+
+import delimited "C:\Users\jsemprini\Documents\PPP\data\indicators-geo-ncis\zip_rural.csv"
+save "C:\Users\jsemprini\Documents\PPP\data\indicators-geo-ncis\rural_zip.dta"
+clear all
+
+clear all
+import delimited "C:\Users\jsemprini\Documents\PPP\data\indicators-geo-ncis\fips_zip_x.csv", encoding(ISO-8859-2) 
+
+rename state statefips
+
+save "C:\Users\jsemprini\Documents\PPP\data\indicators-geo-ncis\rural_zcta.dta"
+
+clear all
+
+use "C:\Users\jsemprini\Documents\PPP\stata_data\final_PPP.dta"
+
+**clean zip data**
+drop if state=="PR" | state=="VI"
+replace zip=92020 if zip==92 
+replace zip=84115 if zip==256 
+replace zip=8858 if zip==885
+replace zip=2116 if zip==851
+drop if city=="BARRANQUITAS"
+
+
+merge m:1 zip using "C:\Users\jsemprini\Documents\PPP\data\indicators-geo-ncis\rural_zip.dta"
+
+gen zcta5=zip
+drop if zip==.
+
+merge m:1 zcta5 using "C:\Users\jsemprini\Documents\PPP\data\indicators-geo-ncis\rural_zcta_collapse.dta", generate(_merge2)
+
+drop if _merge==2 | _merge2==2
+
+order zipcode countyfips city state naicscode code_type code_type4  minloan medloan maxloan ru2003 ui2003 ruca2 nfp childcare other_nfp corp smallbus other title industry sector migmet zip zcta5 county statefips loanamount
+
+gen n_loan=1
+
+save "C:\Users\jsemprini\Documents\PPP\stata_data\final_PPP.dta", replace
+
+Begin analysis
+
+***Jason Semprini: Rural Dental PPP Analysis***
+clear all
+use "C:\Users\jsemprini\Documents\PPP\stata_data\dent_PPP.dta"
+
+***Table 3***
+
+***A: total _ all (metro v. nonmetro)***
+
+collapse (sum) medloan jobsretained n_loan (mean) zpop metro countyfips n_dentists, by(zip) 
+
+
+collapse (sum) medloan jobsretained zpop n_loan n_dentists (mean) metro, by(countyfips) 
+
+collapse (sum) medloan jobsretained zpop n_loan n_dentists, by(metro) 
+
+
+gen med_cap=medloan/zpop
+gen jobs_cap=jobsretained/zpop*100000
+gen loan_cap=n_loan/zpop*100000
+gen dent_ca=n_dentists/zpop*100000
+
+
+export delimited using "C:\Users\jsemprini\Documents\PPP\2-Dent\prelimresults\dent_metro.csv"
+
+***B: total _ all (rural v. non rural)***
+clear all
+use "C:\Users\jsemprini\Documents\PPP\stata_data\dent_PPP.dta"
+
+collapse (sum) medloan jobsretained n_loan (mean) zpop rural countyfips n_dentists, by(zip) 
+
+
+collapse (sum) medloan jobsretained zpop n_loan n_dentists (mean) rural, by(countyfips) 
+
+collapse (sum) medloan jobsretained zpop n_loan n_dentists, by(rural) 
+
+
+gen med_cap=medloan/zpop
+gen jobs_cap=jobsretained/zpop*100000
+gen loan_cap=n_loan/zpop*100000
+gen dent_ca=n_dentists/zpop*100000
+
+
+export delimited using "C:\Users\jsemprini\Documents\PPP\2-Dent\prelimresults\dent_rural.csv"
+
+
+****C: map*****
+clear all
+use "C:\Users\jsemprini\Documents\PPP\stata_data\dent_PPP.dta"
+
+collapse (sum) medloan jobsretained n_loan (mean) zpop rural countyfips n_dentists, by(zip) 
+
+
+collapse (sum) medloan jobsretained zpop n_loan n_dentists (mean) rural, by(countyfips) 
+
+gen med_cap=medloan/zpop
+gen jobs_cap=jobsretained/zpop*100000
+gen loan_cap=n_loan/zpop*100000
+gen dent_ca=n_dentists/zpop*100000
+
+
+export delimited using "C:\Users\jsemprini\Documents\PPP\2-Dent\prelimresults\dent_map.csv"
+
+
+***D: rucca contiunum***
+clear all
+use "C:\Users\jsemprini\Documents\PPP\stata_data\dent_PPP.dta"
+
+collapse (sum) medloan jobsretained n_loan (mean) zpop ruca2 countyfips n_dentists, by(zip) 
+
+collapse (sum) medloan jobsretained zpop n_loan n_dentists, by(ruca2) 
+
+
+gen med_cap=medloan/zpop
+gen jobs_cap=jobsretained/zpop*100000
+gen loan_cap=n_loan/zpop*100000
+gen dent_ca=n_dentists/zpop*100000
+
+
+export delimited using "C:\Users\jsemprini\Documents\PPP\2-Dent\prelimresults\dent_ruc.csv"
+
+***E: metro contiunum***
+clear all
+use "C:\Users\jsemprini\Documents\PPP\stata_data\dent_PPP.dta"
+
+collapse (sum) medloan jobsretained n_loan (mean) zpop ru2003 countyfips n_dentists, by(zip) 
+
+collapse (sum) medloan jobsretained zpop n_loan n_dentists, by(ru2003) 
+
+
+gen med_cap=medloan/zpop
+gen jobs_cap=jobsretained/zpop*100000
+gen loan_cap=n_loan/zpop*100000
+gen dent_ca=n_dentists/zpop*100000
+
+
+export delimited using "C:\Users\jsemprini\Documents\PPP\2-Dent\prelimresults\dent_metrocontinum.csv"
+
+***Jason Semprini: Rural Dental PPP Analysis***
+clear all
+use "C:\Users\jsemprini\Documents\PPP\stata_data\dent_PPP.dta"
+
+****state****
+collapse (sum) medloan jobsretained n_loan (mean) zpop statefips, by(zip) 
+
+
+collapse (sum) medloan jobsretained zpop n_loan, by(statefips) 
+
+
+
+gen med_cap=medloan/zpop
+gen jobs_cap=jobsretained/zpop*100000
+gen loan_cap=n_loan/zpop*100000
+
+drop if statefips==.
+
+export delimited using "C:\Users\jsemprini\Documents\PPP\2-Dent\prelimresults\dent_state1.csv"
+
+
+****state2****
+***Jason Semprini: Rural Dental PPP Analysis***
+clear all
+use "C:\Users\jsemprini\Documents\PPP\stata_data\dent_PPP.dta"
+
+
+drop if other_nfp!=1
+
+****state****
+collapse (sum) medloan jobsretained n_loan (mean) zpop statefips, by(zip) 
+
+
+collapse (sum) medloan jobsretained zpop n_loan, by(statefips) 
+
+
+
+gen med_cap=medloan/zpop
+gen jobs_cap=jobsretained/zpop*100000
+gen loan_cap=n_loan/zpop*100000
+
+drop if statefips==.
+
+export delimited using "C:\Users\jsemprini\Documents\PPP\2-Dent\prelimresults\dent_state_nfp.csv"
+
+****state2****
+***Jason Semprini: Rural Dental PPP Analysis***
+clear all
+use "C:\Users\jsemprini\Documents\PPP\stata_data\dent_PPP.dta"
+
+
+drop if smallbus!=1
+
+****state****
+collapse (sum) medloan jobsretained n_loan (mean) zpop statefips, by(zip) 
+
+
+collapse (sum) medloan jobsretained zpop n_loan, by(statefips) 
+
+
+
+gen med_cap=medloan/zpop
+gen jobs_cap=jobsretained/zpop*100000
+gen loan_cap=n_loan/zpop*100000
+
+drop if statefips==.
+
+export delimited using "C:\Users\jsemprini\Documents\PPP\2-Dent\prelimresults\dent_state_smallbus.csv"
+
+****state2****
+***Jason Semprini: Rural Dental PPP Analysis***
+clear all
+use "C:\Users\jsemprini\Documents\PPP\stata_data\dent_PPP.dta"
+
+
+drop if corp!=1
+
+****state****
+collapse (sum) medloan jobsretained n_loan (mean) zpop statefips, by(zip) 
+
+
+collapse (sum) medloan jobsretained zpop n_loan, by(statefips) 
+
+
+
+gen med_cap=medloan/zpop
+gen jobs_cap=jobsretained/zpop*100000
+gen loan_cap=n_loan/zpop*100000
+
+drop if statefips==.
+
+export delimited using "C:\Users\jsemprini\Documents\PPP\2-Dent\prelimresults\dent_state_corp.csv"
+
+****state2****
+***Jason Semprini: Rural Dental PPP Analysis***
+clear all
+use "C:\Users\jsemprini\Documents\PPP\stata_data\dent_PPP.dta"
+
+
+drop if profassoc!=1
+
+****state****
+collapse (sum) medloan jobsretained n_loan (mean) zpop statefips, by(zip) 
+
+
+collapse (sum) medloan jobsretained zpop n_loan, by(statefips) 
+
+
+
+gen med_cap=medloan/zpop
+gen jobs_cap=jobsretained/zpop*100000
+gen loan_cap=n_loan/zpop*100000
+
+drop if statefips==.
+
+export delimited using "C:\Users\jsemprini\Documents\PPP\2-Dent\prelimresults\dent_state_profassoc.csv"
